@@ -30,6 +30,7 @@ public:
             profile = MappingProfile::fromJson (mapFile.loadFileAsString());
         engine->setProfile (profile.value_or (MainComponent::loadFactoryProfile()));
 
+        engine->softTakeover = settings->getBoolValue ("softTakeover", true);
         auto audioState = settings->getXmlValue ("audioDevice");
         engine->start (audioState.get());
         if (auto session = settings->getXmlValue ("session"))
@@ -59,7 +60,7 @@ private:
             setUsingNativeTitleBar (true);
             setContentOwned (new MainComponent (e, s), true);
             setResizable (true, true);
-            setResizeLimits (1024, 640, 4096, 2400);
+            setResizeLimits (1200, 760, 4096, 2400);
             centreWithSize (getWidth(), getHeight());
             setVisible (true);
         }

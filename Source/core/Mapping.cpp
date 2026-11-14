@@ -114,6 +114,16 @@ std::vector<const Binding*> MappingProfile::bindingsFor (const String& controlId
     for (auto& b : bindings) if (b.control == controlId) out.push_back (&b);
     return out;
 }
+std::vector<const Binding*> MappingProfile::activeBindingsFor (const String& controlId, bool shiftHeld) const
+{
+    std::vector<const Binding*> normal, shifted;
+    for (auto& b : bindings)
+        if (b.control == controlId)
+            (b.shift ? shifted : normal).push_back (&b);
+    if (shiftHeld && ! shifted.empty()) return shifted;
+    return normal;
+}
+
 std::vector<const Binding*> MappingProfile::bindingsForTarget (const String& target) const
 {
     std::vector<const Binding*> out;
@@ -146,7 +156,10 @@ String MappingProfile::learn (const String& target, const MidiAddress& a, Contro
         id = c.id;
     }
     unbindTarget (target);
-    bindings.push_back ({ id, target });
+    Binding b;
+    b.control = id;
+    b.target = target;
+    bindings.push_back (b);
     return id;
 }
 
@@ -184,6 +197,7 @@ var MappingProfile::toVar() const
         o->setProperty ("target", b.target);
         if (b.sensitivity != 1.0f) o->setProperty ("sensitivity", b.sensitivity);
         if (b.invert) o->setProperty ("invert", true);
+        if (b.shift) o->setProperty ("shift", true);
         bs.add (var (o));
     }
     root->setProperty ("bindings", bs);
@@ -220,6 +234,7 @@ MappingProfile MappingProfile::fromVar (const var& v)
             b.target = o.getProperty ("target", {}).toString();
             b.sensitivity = (float) (double) o.getProperty ("sensitivity", 1.0);
             b.invert = (bool) o.getProperty ("invert", false);
+            b.shift = (bool) o.getProperty ("shift", false);
             if (b.control.isNotEmpty() && b.target.isNotEmpty())
                 p.bindings.push_back (b);
         }

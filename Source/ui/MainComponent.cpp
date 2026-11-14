@@ -360,6 +360,187 @@ private:
 };
 
 //==============================================================================
+// Music folder browser. The controller's browse encoder scrolls it; LOAD buttons load it.
+class MainComponent::LibraryPanel : public Component, private ListBoxModel
+{
+public:
+    LibraryPanel (HostEngine& e, PropertiesFile* s) : engine (e), settings (s)
+    {
+        title.setText ("LIBRARY", dontSendNotification);
+        addAndMakeVisible (title);
+        folderButton.onClick = [this] { chooseFolder(); };
+        folderButton.setTooltip ("Pick the folder with your music (searched with subfolders)");
+        addAndMakeVisible (folderButton);
+        search.setTextToShowWhenEmpty ("Search", Colours::grey);
+        search.onTextChange = [this] { applyFilter(); };
+        addAndMakeVisible (search);
+        for (int d = 0; d < numDecks; ++d)
+        {
+            auto* b = loadButtons.add (new TextButton ("LOAD " + deckLetter (d)));
+            setTargetId (*b, deckTarget (d, "load"));
+            b->onClick = [this, d] { loadSelected (d); };
+            addAndMakeVisible (b);
+        }
+        list.setModel (this);
+        list.setRowHeight (20);
+        list.setMultipleSelectionEnabled (false);
+        addAndMakeVisible (list);
+
+        auto saved = settings != nullptr ? settings->getValue ("libraryFolder") : String();
+        File f = saved.isNotEmpty() ? File (saved) : File::getSpecialLocation (File::userMusicDirectory);
+        scan (f);
+    }
+
+    void scan (const File& dir)
+    {
+        folder = dir;
+        all.clear();
+        if (dir.isDirectory())
+        {
+            for (const auto& entry : RangedDirectoryIterator (dir, true, engine.formats.getWildcardForAllFormats(), File::findFiles))
+            {
+                all.add (entry.getFile());
+                if (all.size() >= 20000) break;
+            }
+            struct ByName { static int compareElements (const File& a, const File& b) { return a.getFileName().compareNatural (b.getFileName()); } } cmp;
+            all.sort (cmp);
+        }
+        if (settings != nullptr) settings->setValue ("libraryFolder", dir.getFullPathName());
+        applyFilter();
+    }
+
+    void applyFilter()
+    {
+        shown.clear();
+        const auto q = search.getText().trim();
+        for (auto& f : all)
+            if (q.isEmpty() || f.getFileName().containsIgnoreCase (q) || f.getParentDirectory().getFileName().containsIgnoreCase (q))
+                shown.add (f);
+        engine.librarySize = shown.size();
+        engine.librarySelection = jlimit (0, jmax (0, shown.size() - 1), engine.librarySelection.load());
+        list.updateContent();
+        list.repaint();
+        repaint();
+    }
+
+    void loadSelected (int deck)
+    {
+        const int row = engine.librarySelection.load();
+        if (isPositiveAndBelow (row, shown.size()))
+            engine.loadTrack (deck, shown[row]);
+    }
+
+    void sync()
+    {
+        const int sel = engine.librarySelection.load();
+        if (shown.size() > 0 && list.getSelectedRow() != sel)
+        {
+            list.selectRow (sel, false, true);
+            list.scrollToEnsureRowIsOnscreen (sel);
+        }
+    }
+
+    void paint (Graphics& g) override
+    {
+        paintPanel (g, *this, themeOf (*this).accent);
+        if (shown.isEmpty())
+        {
+            auto& t = themeOf (*this);
+            g.setColour (t.dimText);
+            g.setFont (t.font (13.0f));
+            g.drawText (all.isEmpty() ? "No audio files in " + folder.getFullPathName() + ". Click FOLDER... to choose your music folder, or drag files onto a deck."
+                                      : "Nothing matches the search.", list.getBounds(), Justification::centred);
+        }
+    }
+
+    void resized() override
+    {
+        auto r = getLocalBounds().reduced (8, 6);
+        auto top = r.removeFromTop (24);
+        title.setBounds (top.removeFromLeft (70));
+        for (int d = numDecks - 1; d >= 0; --d) { loadButtons[d]->setBounds (top.removeFromRight (74)); top.removeFromRight (6); }
+        folderButton.setBounds (top.removeFromLeft (90));
+        top.removeFromLeft (8);
+        search.setBounds (top.removeFromLeft (jmin (260, top.getWidth())));
+        r.removeFromTop (4);
+        list.setBounds (r);
+    }
+
+    void themeChanged()
+    {
+        auto& t = themeOf (*this);
+        title.setFont (t.font (13.0f, true));
+        list.setColour (ListBox::backgroundColourId, Colours::transparentBlack);
+        repaint();
+    }
+
+private:
+    int getNumRows() override { return shown.size(); }
+
+    void paintListBoxItem (int row, Graphics& g, int w, int h, bool selected) override
+    {
+        if (! isPositiveAndBelow (row, shown.size())) return;
+        auto& t = themeOf (*this);
+        if (selected) { g.setColour (t.accent.withAlpha (0.3f)); g.fillRect (0, 0, w, h); }
+        auto r = Rectangle<int> (0, 0, w, h).reduced (6, 0);
+        auto& f = shown.getReference (row);
+        for (int d = 0; d < numDecks; ++d)
+        {
+            auto tr = engine.decks[(size_t) d]->player.getTrack();
+            auto tag = r.removeFromLeft (16);
+            if (tr != nullptr && tr->file == f)
+            {
+                g.setColour (t.deckColour (d));
+                g.setFont (t.font (11.0f, true));
+                g.drawText (deckLetter (d), tag, Justification::centred);
+            }
+        }
+        r.removeFromLeft (4);
+        g.setFont (t.font (13.0f));
+        g.setColour (t.text);
+        g.drawText (f.getFileNameWithoutExtension(), r.removeFromLeft (r.getWidth() * 2 / 3), Justification::centredLeft, true);
+        g.setColour (t.dimText);
+        g.drawText (f.getParentDirectory().getFileName(), r, Justification::centredLeft, true);
+    }
+
+    void selectedRowsChanged (int row) override { if (row >= 0) engine.librarySelection = row; }
+
+    void listBoxItemDoubleClicked (int row, const MouseEvent&) override
+    {
+        // Load into whichever deck isn't playing (A first).
+        engine.librarySelection = row;
+        loadSelected (engine.decks[0]->player.playing && ! engine.decks[1]->player.playing ? 1 : 0);
+    }
+
+    var getDragSourceDescription (const SparseSet<int>& rows) override
+    {
+        if (rows.size() > 0 && isPositiveAndBelow (rows[0], shown.size()))
+            return "track:" + shown[rows[0]].getFullPathName();
+        return {};
+    }
+
+    void chooseFolder()
+    {
+        chooser = std::make_unique<FileChooser> ("Choose your music folder", folder);
+        chooser->launchAsync (FileBrowserComponent::openMode | FileBrowserComponent::canSelectDirectories, [this] (const FileChooser& fc)
+        {
+            if (fc.getResult().isDirectory()) scan (fc.getResult());
+        });
+    }
+
+    HostEngine& engine;
+    PropertiesFile* settings;
+    Label title;
+    TextButton folderButton { "FOLDER..." };
+    OwnedArray<TextButton> loadButtons;
+    TextEditor search;
+    ListBox list;
+    Array<File> all, shown;
+    File folder;
+    std::unique_ptr<FileChooser> chooser;
+};
+
+//==============================================================================
 MappingProfile MainComponent::loadFactoryProfile()
 {
     auto p = MappingProfile::fromJson (String::fromUTF8 (BinaryData::herculesdjcontrolmixultra_json, BinaryData::herculesdjcontrolmixultra_jsonSize));
@@ -413,6 +594,19 @@ MainComponent::MainComponent (HostEngine& e, PropertiesFile* s) : engine (e), se
     addChildComponent (monitorText);
     mappingList = std::make_unique<MappingList> (engine);
     addChildComponent (*mappingList);
+    library = std::make_unique<LibraryPanel> (engine, settings);
+    addChildComponent (*library);
+    libraryButton.setClickingTogglesState (true);
+    libraryButton.onClick = [this] { setLibraryVisible (libraryButton.getToggleState()); };
+    libraryButton.setTooltip ("Browse your music folder");
+    addAndMakeVisible (libraryButton);
+    engine.onLoadSelected = [this] (int d) { library->loadSelected (d); };
+    engine.onTrackLoaded = [this] (int, const String& err)
+    {
+        if (err.isNotEmpty())
+            AlertWindow::showMessageBoxAsync (MessageBoxIconType::WarningIcon, "Could not load track", err);
+        library->repaint();
+    };
 
     overlay = std::make_unique<LearnOverlay> (*this, engine);
     addChildComponent (*overlay);
@@ -423,7 +617,8 @@ MainComponent::MainComponent (HostEngine& e, PropertiesFile* s) : engine (e), se
 
     setTheme (settings != nullptr ? settings->getIntValue ("theme", 0) : 0);
     setMonitorVisible (settings != nullptr && settings->getBoolValue ("monitor", false));
-    setSize (1280, 760);
+    if (! monitorVisible) setLibraryVisible (settings == nullptr || settings->getBoolValue ("library", true));
+    setSize (1440, 900);
     startTimerHz (30);
     updateStatus();
 }
@@ -433,6 +628,8 @@ MainComponent::~MainComponent()
     stopTimer();
     engine.onLearned = nullptr;
     engine.onCapture = nullptr;
+    engine.onLoadSelected = nullptr;
+    engine.onTrackLoaded = nullptr;
     engine.removeChangeListener (this);
     engine.deviceManager.removeChangeListener (this);
     wizard.reset();
@@ -448,6 +645,8 @@ void MainComponent::saveState()
     if (settings == nullptr) return;
     settings->setValue ("theme", themeIndex);
     settings->setValue ("monitor", monitorVisible);
+    settings->setValue ("library", libraryVisible);
+    settings->setValue ("softTakeover", engine.softTakeover.load());
     if (auto xml = engine.deviceManager.createStateXml())
         settings->setValue ("audioDevice", xml.get());
     if (auto xml = engine.createSessionXml())
@@ -484,6 +683,7 @@ void MainComponent::themeChanged()
     deckA->themeChanged();
     deckB->themeChanged();
     mixer.themeChanged();
+    library->themeChanged();
     sendLookAndFeelChange();
     repaint();
 }
@@ -497,9 +697,19 @@ void MainComponent::setLearnMode (bool on)
     updateStatus();
 }
 
+void MainComponent::setLibraryVisible (bool on)
+{
+    libraryVisible = on;
+    libraryButton.setToggleState (on, dontSendNotification);
+    library->setVisible (on);
+    if (on && monitorVisible) setMonitorVisible (false);
+    resized();
+}
+
 void MainComponent::setMonitorVisible (bool on)
 {
     monitorVisible = on;
+    if (on && libraryVisible) setLibraryVisible (false);
     monitorButton.setToggleState (on, dontSendNotification);
     monitorText.setVisible (on);
     mappingList->setVisible (on);
@@ -550,6 +760,7 @@ void MainComponent::updateStatus()
 void MainComponent::timerCallback()
 {
     deckA->tick();
+    if (libraryVisible) library->sync();
     deckB->tick();
     mixer.tick();
     if (overlay->isVisible()) overlay->repaint();
@@ -578,6 +789,7 @@ void MainComponent::showControllerMenu()
     m.addSectionHeader ("Mapping: " + p.name);
     m.addItem ("Learn controller (step through every control)...", [this] { startWizard(); });
     m.addItem ("MIDI learn single controls", [this] { setLearnMode (true); });
+    m.addItem ("Soft takeover for faders and knobs", true, engine.softTakeover.load(), [this] { engine.softTakeover = ! engine.softTakeover.load(); });
     m.addSeparator();
     m.addItem ("Load Hercules DJControl Mix Ultra (draft)", [this]
     {
@@ -677,9 +889,9 @@ void MainComponent::resized()
     logo.setBounds (top.removeFromLeft (110));
     themeBox.setBounds (top.removeFromRight (150));
     top.removeFromRight (8);
-    for (auto* b : { &monitorButton, &learnButton, &controllerButton, &pluginsButton, &audioButton })
+    for (auto* b : { &monitorButton, &learnButton, &libraryButton, &controllerButton, &pluginsButton, &audioButton })
     {
-        b->setBounds (top.removeFromRight (b == &audioButton ? 110 : 100));
+        b->setBounds (top.removeFromRight (b == &audioButton ? 110 : 96));
         top.removeFromRight (6);
     }
     status.setBounds (top);
@@ -687,14 +899,19 @@ void MainComponent::resized()
     auto body = r.reduced (10);
     if (overlay) overlay->setBounds (r);
     if (wizard) wizard->setBounds (r);
+    if (libraryVisible)
+    {
+        library->setBounds (body.removeFromBottom (200));
+        body.removeFromBottom (8);
+    }
     if (monitorVisible)
     {
-        auto bottom = body.removeFromBottom (170);
+        auto bottom = body.removeFromBottom (200);
         body.removeFromBottom (8);
         mappingList->setBounds (bottom.removeFromRight (bottom.getWidth() / 2).withTrimmedLeft (4));
         monitorText.setBounds (bottom.withTrimmedRight (4));
     }
-    const int mixW = jlimit (170, 230, body.getWidth() / 6);
+    const int mixW = jlimit (150, 200, body.getWidth() / 7);
     const int deckW = (body.getWidth() - mixW - 16) / 2;
     deckA->setBounds (body.removeFromLeft (deckW));
     deckB->setBounds (body.removeFromRight (deckW));

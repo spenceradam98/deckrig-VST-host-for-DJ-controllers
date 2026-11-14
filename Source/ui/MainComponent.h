@@ -3,7 +3,7 @@
 
 namespace deckrig
 {
-class MainComponent : public juce::Component, private juce::Timer, private juce::ChangeListener
+class MainComponent : public juce::Component, public juce::DragAndDropContainer, private juce::Timer, private juce::ChangeListener
 {
 public:
     MainComponent (HostEngine&, juce::PropertiesFile* settings);
@@ -17,6 +17,8 @@ public:
     void saveState();
     void setLearnMode (bool);
     void setMonitorVisible (bool);
+    void setLibraryVisible (bool);
+    void refreshNow() { timerCallback(); }
 
     static MappingProfile loadFactoryProfile();
     static juce::File getMappingFile();
@@ -26,6 +28,7 @@ private:
     class Wizard;
     class MappingList;
     class ScannerWindow;
+    class LibraryPanel;
 
     void timerCallback() override;
     void changeListenerCallback (juce::ChangeBroadcaster*) override;
@@ -44,20 +47,22 @@ private:
 
     juce::Label logo, status;
     juce::TextButton audioButton { "AUDIO / MIDI" }, pluginsButton { "PLUGINS" }, controllerButton { "CONTROLLER" },
-                     learnButton { "MIDI LEARN" }, monitorButton { "MONITOR" };
+                     learnButton { "MIDI LEARN" }, monitorButton { "MONITOR" },
+                     libraryButton { "LIBRARY" };
     juce::ComboBox themeBox;
 
     std::unique_ptr<DeckPanel> deckA, deckB;
     MixerPanel mixer;
     juce::TextEditor monitorText;
     std::unique_ptr<MappingList> mappingList;
+    std::unique_ptr<LibraryPanel> library;
     std::unique_ptr<LearnOverlay> overlay;
     std::unique_ptr<Wizard> wizard;
     std::unique_ptr<ScannerWindow> scanner;
     std::unique_ptr<juce::FileChooser> chooser;
     int lastMonitorCount = -1;
     juce::String lastMonitorTail;
-    bool monitorVisible = false;
+    bool monitorVisible = false, libraryVisible = true;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };

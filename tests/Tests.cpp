@@ -2,6 +2,8 @@
 #include "core/Mapping.h"
 #include "core/MixerMath.h"
 #include "core/Targets.h"
+#include "core/TrackAnalysis.h"
+#include "audio/TrackPlayer.h"
 #include "BinaryData.h"
 #include <cstdio>
 
@@ -140,8 +142,168 @@ static void testTargets()
     CHECK (ids.size() == (int) allTargets().size());
 }
 
+// Synthetic track: a decaying kick-like thump on every beat plus quiet hi-hat noise off-beat.
+static std::vector<float> clickTrack (double bpm, double sr, double seconds, double offset)
+{
+    std::vector<float> x ((size_t) (sr * seconds), 0.0f);
+    juce::Random rng (7);
+    const double beat = 60.0 / bpm;
+    for (double t = offset; t < seconds; t += beat)
+    {
+        const auto start = (size_t) (t * sr);
+        for (size_t i = 0; i < (size_t) (0.12 * sr) && start + i < x.size(); ++i)
+        {
+            const double tt = i / sr;
+            x[start + i] += (float) (0.9 * std::exp (-tt * 30.0) * std::sin (2 * pi * (55.0 + 80.0 * std::exp (-tt * 40.0)) * tt));
+        }
+        const auto hat = (size_t) ((t + beat * 0.5) * sr);
+        for (size_t i = 0; i < (size_t) (0.02 * sr) && hat + i < x.size(); ++i)
+            x[hat + i] += 0.08f * (rng.nextFloat() * 2.0f - 1.0f);
+    }
+    return x;
+}
+
+static void testBeatDetection()
+{
+    for (double bpm : { 92.0, 124.0, 128.0, 140.0, 174.0 })
+    {
+        const double sr = 44100, offset = 0.37;
+        auto x = clickTrack (bpm, sr, 40.0, offset);
+        auto info = detectBeats (x.data(), (int64_t) x.size(), sr);
+        std::printf ("  tempo %.1f -> detected %.2f, first beat %.3f (phase err %.3f beats)\n", bpm, info.bpm, info.firstBeat,
+                     std::abs (phaseCorrection (info.firstBeat, offset, bpm, 0.0)) / beatLength (bpm));
+        CHECK (std::abs (info.bpm - bpm) < 0.5);
+        // Grid lines up with the real beats to within 3 % of a beat.
+        CHECK (std::abs (phaseCorrection (info.firstBeat, offset, bpm, 0.0)) / beatLength (bpm) < 0.03);
+    }
+    std::vector<float> silence (44100 * 10, 0.0f);
+    CHECK (detectBeats (silence.data(), (int64_t) silence.size(), 44100).bpm == 0.0);
+
+    CHECK (near (beatPhase (0.75, 0.25, 120.0), 0.0));
+    CHECK (near (beatPhase (1.0, 0.25, 120.0), 0.5));
+    CHECK (near (phaseCorrection (1.0, 0.0, 120.0, 0.1), 0.05));   // 0.1 beat ahead of phase 0 => +0.05 s
+    CHECK (near (nearestBeat (1.12, 0.0, 120.0), 1.0));
+    CHECK (near (hermite (0, 1, 2, 3, 0.5f), 1.5));
+}
+
+static std::shared_ptr<TrackData> makeTrack (double bpm, double seconds)
+{
+    auto t = std::make_shared<TrackData>();
+    t->sampleRate = 44100;
+    auto x = clickTrack (bpm, t->sampleRate, seconds, 0.0);
+    t->audio.setSize (2, (int) x.size());
+    for (int c = 0; c < 2; ++c) t->audio.copyFrom (c, 0, x.data(), (int) x.size());
+    t->beats.bpm = bpm;
+    t->beats.firstBeat = 0.0;
+    t->title = "test";
+    return t;
+}
+
+static void runFor (TrackPlayer& p, double seconds, float& tempo, float range = 0.08f, const TrackPlayer* master = nullptr)
+{
+    juce::AudioBuffer<float> buf (2, 512);
+    for (int i = 0; i < (int) (seconds * 44100 / 512); ++i) { buf.clear(); p.render (buf, 512, tempo, range, master); }
+}
+
+static void testPlayer()
+{
+    using C = TrackPlayer::Cmd;
+    TrackPlayer p;
+    p.prepare (44100);
+    p.setTrack (makeTrack (120.0, 30.0));
+    float tempo = 0.5f;
+    CHECK (p.loaded && ! p.playing && near (p.position, 0.0));
+
+    p.push ({ C::PlayToggle });
+    runFor (p, 2.0, tempo);
+    CHECK (p.playing && std::abs (p.position - 2.0) < 0.05);
+
+    // Tempo +8 % (fader at top of an 8 % range) plays faster.
+    tempo = 1.0f;
+    const double before = p.position;
+    runFor (p, 1.0, tempo);
+    CHECK (std::abs ((p.position - before) - 1.08) < 0.03);
+    CHECK (std::abs (p.effectiveBpm - 129.6) < 0.01);
+    tempo = 0.5f;
+
+    // 4-beat loop (2 s at 120 BPM) keeps the playhead inside it.
+    p.push ({ C::LoopBeats, 4.0 });
+    runFor (p, 0.05, tempo);
+    CHECK (p.looping && near (p.loopEnd - p.loopStart, 2.0));
+    runFor (p, 5.0, tempo);
+    CHECK (p.position >= p.loopStart - 0.01 && p.position <= p.loopEnd + 0.01);
+    p.push ({ C::LoopOff });
+
+    // Hot cue: first press stores, later press jumps.
+    p.push ({ C::HotcueDown, 0, 2 });
+    runFor (p, 0.02, tempo);
+    const double hc = p.hotcues[2];
+    CHECK (hc >= 0);
+    runFor (p, 1.0, tempo);
+    p.push ({ C::HotcueDown, 0, 2 });
+    runFor (p, 0.02, tempo);
+    CHECK (std::abs (p.position - hc) < 0.05);
+    p.push ({ C::HotcueDelete, 0, 2 });
+    runFor (p, 0.02, tempo);
+    CHECK (p.hotcues[2] < 0);
+
+    // CDJ cue: while playing, CUE returns to the cue point and stops.
+    p.push ({ C::CueDown }); p.push ({ C::CueUp });
+    runFor (p, 0.1, tempo);
+    CHECK (! p.playing && std::abs (p.position - p.cuePoint) < 0.01);
+    // While stopped, CUE sets the cue and previews only while held.
+    p.push ({ C::Seek, 0.5 });
+    runFor (p, 0.02, tempo);
+    p.push ({ C::CueDown });
+    runFor (p, 0.5, tempo);
+    CHECK (p.playing && std::abs (p.cuePoint - 15.0) < 0.05);
+    p.push ({ C::CueUp });
+    runFor (p, 0.05, tempo);
+    CHECK (! p.playing && std::abs (p.position - p.cuePoint) < 0.01);
+
+    // Sync: a 125 BPM deck follows a 120 BPM master and moves its tempo fader.
+    TrackPlayer q;
+    q.prepare (44100);
+    q.setTrack (makeTrack (125.0, 30.0));
+    float qTempo = 0.5f;
+    p.push ({ C::PlayToggle });
+    runFor (p, 0.3, tempo);
+    q.push ({ C::PlayToggle });
+    q.push ({ C::SyncToggle });
+    juce::AudioBuffer<float> buf (2, 512);
+    for (int i = 0; i < 200; ++i) { buf.clear(); p.render (buf, 512, tempo, 0.08f, nullptr); q.render (buf, 512, qTempo, 0.08f, &p); }
+    CHECK (q.synced && std::abs (q.effectiveBpm - 120.0) < 0.01);
+    CHECK (qTempo < 0.5f);
+    // Beats line up after sync.
+    const double phaseP = beatPhase (p.position, 0.0, 120.0), phaseQ = beatPhase (q.position, 0.0, 125.0);
+    CHECK (std::abs (phaseP - phaseQ) < 0.05 || std::abs (phaseP - phaseQ) > 0.95);
+
+    // Playing to the end stops.
+    p.push ({ C::Seek, 0.999 });
+    runFor (p, 0.5, tempo);
+    CHECK (! p.playing);
+}
+
+static void testShiftBindings()
+{
+    MappingProfile p;
+    p.controls.push_back ({ "k", "Knob", { MsgType::CC, 1, 5 } });
+    Binding a; a.control = "k"; a.target = "deck.A.filter";
+    Binding b; b.control = "k"; b.target = "deck.A.macro.1"; b.shift = true;
+    p.bindings = { a, b };
+    CHECK (p.activeBindingsFor ("k", false).size() == 1 && p.activeBindingsFor ("k", false)[0]->target == "deck.A.filter");
+    CHECK (p.activeBindingsFor ("k", true).size() == 1 && p.activeBindingsFor ("k", true)[0]->target == "deck.A.macro.1");
+    auto back = MappingProfile::fromJson (p.toJson());
+    CHECK (back && back->bindings[1].shift && ! back->bindings[0].shift);
+    p.bindings = { a };
+    CHECK (p.activeBindingsFor ("k", true).size() == 1);  // no shift binding: falls back
+}
+
 int main()
 {
+    testBeatDetection();
+    testPlayer();
+    testShiftBindings();
     testDecode();
     testRelative();
     testProfile();

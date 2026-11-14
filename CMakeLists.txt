@@ -10,7 +10,7 @@ if(MSVC)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")  # static CRT: no VC++ redist needed
 endif()
 
-project(DeckRig VERSION 0.1.0 LANGUAGES C CXX)
+project(DeckRig VERSION 0.2.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -42,14 +42,21 @@ set(DECKRIG_DEFS
     JUCE_PLUGINHOST_VST=0
     DECKRIG_BRAND_NAME="${BRAND_NAME}"
     DECKRIG_PRODUCT_NAME="${PRODUCT_NAME}"
-    DECKRIG_VERSION="${PROJECT_VERSION}")
+    DECKRIG_VERSION="${PROJECT_VERSION}"
+    JUCE_USE_MP3AUDIOFORMAT=1
+    JUCE_USE_FLAC=1
+    JUCE_USE_OGGVORBIS=1
+    JUCE_USE_WINDOWS_MEDIA_FORMAT=1)
 
 set(DECKRIG_SOURCES
     Source/core/Mapping.cpp
+    Source/core/TrackAnalysis.cpp
+    Source/audio/TrackPlayer.cpp
     Source/audio/Deck.cpp
     Source/audio/HostEngine.cpp
     Source/hosting/PluginChain.cpp
     Source/ui/Widgets.cpp
+    Source/ui/DeckWidgets.cpp
     Source/ui/Panels.cpp
     Source/ui/MainComponent.cpp)
 
@@ -79,10 +86,10 @@ target_link_libraries(DeckRig
 option(DECKRIG_BUILD_TESTS "Build unit tests" ON)
 if(DECKRIG_BUILD_TESTS)
     juce_add_console_app(DeckRigTests PRODUCT_NAME "DeckRigTests")
-    target_sources(DeckRigTests PRIVATE tests/Tests.cpp Source/core/Mapping.cpp)
+    target_sources(DeckRigTests PRIVATE tests/Tests.cpp Source/core/Mapping.cpp Source/core/TrackAnalysis.cpp Source/audio/TrackPlayer.cpp)
     target_include_directories(DeckRigTests PRIVATE Source)
-    target_compile_definitions(DeckRigTests PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
-    target_link_libraries(DeckRigTests PRIVATE DeckRigData juce::juce_core PUBLIC juce::juce_recommended_config_flags)
+    target_compile_definitions(DeckRigTests PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_USE_MP3AUDIOFORMAT=1)
+    target_link_libraries(DeckRigTests PRIVATE DeckRigData juce::juce_audio_formats PUBLIC juce::juce_recommended_config_flags)
     enable_testing()
     add_test(NAME deckrig COMMAND DeckRigTests)
 endif()

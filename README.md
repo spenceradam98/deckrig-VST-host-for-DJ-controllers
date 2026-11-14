@@ -1,13 +1,18 @@
 # DeckRig
 
-A standalone VST3 host built around a DJ controller. Two decks of plugin chains, a DJ
-mixer (EQ, filter, crossfader, headphone cue), and a controller mapping you can learn
-in minutes. First controller: Hercules DJControl Mix Ultra. Built with JUCE 8 and CMake.
+Two-deck DJ software with a VST3 host built in. Play tracks, live input or instrument
+plugins through a chain of your plugins on each deck, mix them on a DJ mixer, and drive
+it all from a DJ controller. First controller: Hercules DJControl Mix Ultra.
+Built with JUCE 8 and CMake.
 
 ![Themes](docs/screenshots/themes.png)
 
-- 2 decks, each with live input and/or instrument, up to 8 plugins, 8 macro knobs
-- Pads play the deck's instrument; jog wheels nudge the selected macro
+- Track decks: play/CDJ cue, tempo (8/16/50 %), jog scratch and nudge, sync with beat
+  phase, 8 hot cues, beat loops, beat jump, waveforms, automatic BPM and beat grid
+- Music library: folder browser with search, controller scrolling, drag and drop
+- Each deck also takes live input and instrument plugins, up to 8 plugins, 8 macros,
+  and saves/loads its whole rig
+- Pad modes: hot cue, loop, plugin on/off, play instrument; Shift layer; soft takeover
 - 3-band kill EQ, bipolar filter, gain, volume, CUE per deck; smooth/sharp/linear crossfader
 - MIDI learn (click a control, touch the hardware), guided "Learn controller" wizard,
   MIDI monitor, JSON mapping files, LED feedback

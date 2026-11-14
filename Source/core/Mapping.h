@@ -58,6 +58,7 @@ struct Binding
     juce::String target;   // host target id, see Targets.h
     float sensitivity = 1.0f; // relative controls: units per step = sensitivity / 128
     bool invert = false;
+    bool shift = false;    // only while a Shift button is held
 };
 
 // One decoded incoming MIDI event.
@@ -86,6 +87,9 @@ struct MappingProfile
     ControlDef* findControl (const juce::String& id);
     const ControlDef* findControl (const MidiAddress&) const;
     std::vector<const Binding*> bindingsFor (const juce::String& controlId) const;
+    // Bindings that apply right now: shift bindings while shift is held (falling back
+    // to normal ones if the control has none), normal bindings otherwise.
+    std::vector<const Binding*> activeBindingsFor (const juce::String& controlId, bool shiftHeld) const;
     std::vector<const Binding*> bindingsForTarget (const juce::String& target) const;
 
     // Binds target to the control with this address, creating a control if none

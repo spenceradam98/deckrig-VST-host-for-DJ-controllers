@@ -10,6 +10,7 @@ void Deck::prepare (double sr, int maxBlock)
     buffer.setSize (2, maxBlock, false, true, false);
     midi.ensureSize (2048);
     chain.prepare (sr, maxBlock, 2);
+    player.prepare (sr);
     midiIn.reset (sr);
     low.reset(); mid.reset(); high.reset(); filt.reset();
     lastLow = lastMid = lastHigh = lastFilter = -1;
@@ -43,7 +44,7 @@ void Deck::updateFilters()
     }
 }
 
-void Deck::process (const float* const* inputs, int numInputs, int n)
+void Deck::process (const float* const* inputs, int numInputs, int n, const Deck* other)
 {
     jassert (n <= buffer.getNumSamples());
     buffer.clear (0, n);
@@ -57,6 +58,13 @@ void Deck::process (const float* const* inputs, int numInputs, int n)
             buffer.copyFrom (0, 0, inputs[l], n);
             buffer.copyFrom (1, 0, (r < numInputs && inputs[r] != nullptr) ? inputs[r] : inputs[l], n);
         }
+    }
+
+    {
+        float tempo = params.tempo.load();
+        const float range = tempoRanges[juce::jlimit (0, 2, params.tempoRange.load())];
+        player.render (buffer, n, tempo, range, other != nullptr ? &other->player : nullptr);
+        if (player.synced) params.tempo = tempo;
     }
 
     midi.clear();
@@ -132,5 +140,32 @@ void Deck::validateMacros()
     for (int m = 0; m < numMacros; ++m)
         if (macros[(size_t) m].isAssigned())
             assignMacro (m, macros[(size_t) m].slot, macros[(size_t) m].param);
+}
+
+std::unique_ptr<juce::XmlElement> Deck::createRigXml() const
+{
+    auto xml = std::make_unique<juce::XmlElement> ("DECKRIG_RIG");
+    xml->setAttribute ("version", 1);
+    xml->addChildElement (chain.toXml().release());
+    for (int m = 0; m < numMacros; ++m)
+    {
+        auto& a = macros[(size_t) m];
+        if (! a.isAssigned()) continue;
+        auto* me = xml->createNewChildElement ("MACRO");
+        me->setAttribute ("index", m);
+        me->setAttribute ("slot", a.slot);
+        me->setAttribute ("param", a.param);
+    }
+    return xml;
+}
+
+void Deck::restoreRigXml (const juce::XmlElement& xml)
+{
+    for (int m = 0; m < numMacros; ++m)
+        macros[(size_t) m] = {};
+    if (auto* c = xml.getChildByName ("CHAIN"))
+        chain.fromXml (*c);
+    for (auto* me : xml.getChildWithTagNameIterator ("MACRO"))
+        assignMacro (me->getIntAttribute ("index"), me->getIntAttribute ("slot", -1), me->getIntAttribute ("param", -1));
 }
 } // namespace deckrig

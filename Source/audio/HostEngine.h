@@ -40,7 +40,22 @@ public:
     void setValue (const juce::String& target, float value01);
     bool getToggle (const juce::String& target) const;
     void setToggle (const juce::String& target, bool on);
-    void trigger (const juce::String& target);
+    void trigger (const juce::String& target);          // any thread
+    bool getLed (const juce::String& target) const;     // state shown on the controller
+    void padPress (int deck, int pad, bool down, int velocity, bool shift);  // any thread
+    bool isShiftHeld() const noexcept { return shiftMask.load() != 0; }
+
+    // ---- Tracks ----
+    juce::AudioFormatManager formats;
+    void loadTrack (int deck, const juce::File&);       // async; onTrackLoaded fires when done
+    std::function<void (int deck, const juce::String& error)> onTrackLoaded;
+    bool isLoading (int deck) const { return loading[(size_t) deck].load(); }
+
+    // ---- Library (the UI owns the list; the controller scrolls it) ----
+    std::atomic<int> librarySelection { 0 }, librarySize { 0 };
+    std::function<void (int deck)> onLoadSelected;      // message thread
+
+    std::atomic<bool> softTakeover { true };
 
     // ---- Mapping ----
     MappingProfile getProfile() const;
@@ -85,6 +100,18 @@ private:
     std::atomic<bool>* findBool (const juce::String& target) const;
     static bool parseDeckTarget (const juce::String& target, int& deck, juce::String& rest);
     void addMonitorLine (const juce::String&);
+    void momentary (const juce::String& target, bool down);
+    void rememberTrack (int deck);
+    void loadTrackCache();
+    void saveTrackCache();
+
+    juce::ThreadPool loader { 1 };
+    std::array<std::atomic<bool>, numDecks> loading {};
+    std::array<int, numDecks> loadGeneration {}, savedChange {};
+    juce::var trackCache;     // path -> { cue, hotcues[], bpm }
+    bool trackCacheDirty = false;
+    std::atomic<int> shiftMask { 0 };
+    std::map<juce::String, float> lastHardware;  // soft takeover, MIDI thread only
 
     mutable juce::CriticalSection profileLock;
     MappingProfile profile;

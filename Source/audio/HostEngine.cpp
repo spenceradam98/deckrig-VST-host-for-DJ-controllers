@@ -6,6 +6,8 @@ using namespace juce;
 
 HostEngine::HostEngine()
 {
+    formats.registerBasicFormats();
+    loadTrackCache();
     for (int d = 0; d < numDecks; ++d)
     {
         decks[(size_t) d] = std::make_unique<Deck> (d, library);
@@ -16,6 +18,9 @@ HostEngine::HostEngine()
 HostEngine::~HostEngine()
 {
     shutdown();
+    loader.removeAllJobs (true, 10000);
+    for (int d = 0; d < numDecks; ++d) rememberTrack (d);
+    saveTrackCache();
 }
 
 void HostEngine::start (const XmlElement* savedDeviceState)
@@ -91,7 +96,7 @@ void HostEngine::audioDeviceIOCallbackWithContext (const float* const* inputs, i
         for (int d = 0; d < numDecks; ++d)
         {
             auto& deck = *decks[(size_t) d];
-            deck.process (chunkIn, nIn, n);
+            deck.process (chunkIn, nIn, n, decks[(size_t) (1 - d)].get());
             auto& buf = deck.getBuffer();
             auto& g = deckGain[(size_t) d];
             auto& cg = deckCue[(size_t) d];
@@ -173,6 +178,7 @@ std::atomic<float>* HostEngine::findFloat (const String& t) const
     if (r == "eqMid") return &p.eqMid;
     if (r == "eqLow") return &p.eqLow;
     if (r == "filter") return &p.filter;
+    if (r == "tempo") return &p.tempo;
     return nullptr;
 }
 
@@ -198,7 +204,14 @@ float HostEngine::getValue (const String& t) const
 void HostEngine::setValue (const String& t, float v)
 {
     v = jlimit (0.0f, 1.0f, v);
-    if (auto* f = findFloat (t)) { f->store (v); return; }
+    if (auto* f = findFloat (t))
+    {
+        f->store (v);
+        int dk; String rr;
+        if (parseDeckTarget (t, dk, rr) && rr == "tempo")
+            decks[(size_t) dk]->player.push ({ TrackPlayer::Cmd::SyncOff });
+        return;
+    }
     int d; String r;
     if (parseDeckTarget (t, d, r) && r.startsWith ("macro."))
     {
@@ -231,11 +244,116 @@ void HostEngine::setToggle (const String& t, bool on)
 
 void HostEngine::trigger (const String& t)
 {
+    if (t == "library.load") return;
     int d; String r;
     if (! parseDeckTarget (t, d, r)) return;
     auto& deck = *decks[(size_t) d];
+    using C = TrackPlayer::Cmd;
+    auto& pl = deck.player;
     if (r == "macroNext") deck.selectedMacro = (deck.selectedMacro + 1) % numMacros;
-    if (r == "macroPrev") deck.selectedMacro = (deck.selectedMacro + numMacros - 1) % numMacros;
+    else if (r == "macroPrev") deck.selectedMacro = (deck.selectedMacro + numMacros - 1) % numMacros;
+    else if (r == "play") pl.push ({ C::PlayToggle });
+    else if (r == "sync") pl.push ({ C::SyncToggle });
+    else if (r == "loopHalve") pl.push ({ C::LoopHalve });
+    else if (r == "loopDouble") pl.push ({ C::LoopDouble });
+    else if (r == "reloop") pl.push ({ C::Reloop });
+    else if (r == "beatjumpBack") pl.push ({ C::BeatJump, -4.0 });
+    else if (r == "beatjumpFwd") pl.push ({ C::BeatJump, 4.0 });
+    else if (r == "padMode.hotcue") deck.params.padMode = padHotcue;
+    else if (r == "padMode.loop") deck.params.padMode = padLoop;
+    else if (r == "padMode.fx") deck.params.padMode = padFx;
+    else if (r == "padMode.instrument") deck.params.padMode = padInstrument;
+    else if (r == "load")
+        MessageManager::callAsync ([this, d] { if (onLoadSelected) onLoadSelected (d); });
+}
+
+void HostEngine::momentary (const String& t, bool down)
+{
+    int d; String r;
+    if (! parseDeckTarget (t, d, r)) return;
+    auto& pl = decks[(size_t) d]->player;
+    using C = TrackPlayer::Cmd;
+    if (r == "cue") pl.push ({ down ? C::CueDown : C::CueUp });
+    else if (r == "jogTouch") pl.push ({ C::JogTouch, down ? 1.0 : 0.0 });
+    else if (r == "shift")
+    {
+        if (down) shiftMask |= (1 << d); else shiftMask &= ~(1 << d);
+    }
+    else if (r.startsWith ("pad."))
+        padPress (d, r.fromFirstOccurrenceOf (".", false, false).getIntValue() - 1, down, 100, isShiftHeld());
+}
+
+void HostEngine::padPress (int d, int pad, bool down, int velocity, bool shift)
+{
+    if (! isPositiveAndBelow (d, numDecks) || ! isPositiveAndBelow (pad, 8)) return;
+    auto& deck = *decks[(size_t) d];
+    auto& pl = deck.player;
+    using C = TrackPlayer::Cmd;
+    switch (deck.params.padMode.load())
+    {
+        case padHotcue:
+            if (shift) { if (down) pl.push ({ C::HotcueDelete, 0, pad }); }
+            else pl.push ({ down ? C::HotcueDown : C::HotcueUp, 0, pad });
+            break;
+        case padLoop:
+            if (! down) break;
+            if (shift)
+            {
+                static const double jumps[] = { -16, -4, -1, -0.25, 0.25, 1, 4, 16 };
+                pl.push ({ C::BeatJump, jumps[pad] });
+            }
+            else if (pad < 6) pl.push ({ C::LoopBeats, loopPadBeats[pad] });
+            else pl.push ({ pad == 6 ? C::LoopHalve : C::LoopDouble });
+            break;
+        case padFx:
+            if (down)
+                MessageManager::callAsync ([this, d, pad]
+                {
+                    const auto t = deckTarget (d, "slot." + String (pad + 1) + ".bypass");
+                    setToggle (t, ! getToggle (t));
+                    refreshLeds (false);
+                });
+            break;
+        case padInstrument:
+        default:
+        {
+            const double now = Time::getMillisecondCounterHiRes() * 0.001;
+            if (down) deck.midiIn.addMessageToQueue (MidiMessage::noteOn (1, 36 + pad, (uint8) jlimit (1, 127, velocity)).withTimeStamp (now));
+            else deck.midiIn.addMessageToQueue (MidiMessage::noteOff (1, 36 + pad).withTimeStamp (now));
+            break;
+        }
+    }
+}
+
+bool HostEngine::getLed (const String& t) const
+{
+    int d; String r;
+    if (! parseDeckTarget (t, d, r))
+        return false;
+    auto& deck = *decks[(size_t) d];
+    auto& pl = deck.player;
+    if (r == "play") return pl.playing.load();
+    if (r == "cue") return pl.loaded && ! pl.playing;
+    if (r == "sync") return pl.synced.load();
+    if (r == "reloop") return pl.looping.load();
+    if (r == "shift") return (shiftMask.load() & (1 << d)) != 0;
+    if (r == "padMode.hotcue") return deck.params.padMode == padHotcue;
+    if (r == "padMode.loop") return deck.params.padMode == padLoop;
+    if (r == "padMode.fx") return deck.params.padMode == padFx;
+    if (r == "padMode.instrument") return deck.params.padMode == padInstrument;
+    if (r.startsWith ("pad."))
+    {
+        const int p = r.fromFirstOccurrenceOf (".", false, false).getIntValue() - 1;
+        if (! isPositiveAndBelow (p, 8)) return false;
+        switch (deck.params.padMode.load())
+        {
+            case padHotcue: return pl.hotcues[(size_t) p] >= 0;
+            case padLoop:   return pl.looping && (p >= 6 || std::abs (pl.loopBeats - loopPadBeats[p]) < 1e-6);
+            case padFx:     return getToggle (deckTarget (d, "slot." + String (p + 1) + ".bypass"));
+            default:        return false;
+        }
+    }
+    return getToggle (t);
 }
 
 //==============================================================================
@@ -351,7 +469,7 @@ void HostEngine::applyEvent (const RawMidi& e)
     auto* control = profile.findControl (e.address);
     if (control == nullptr)
         return;
-    for (auto* b : profile.bindingsFor (control->id))
+    for (auto* b : profile.activeBindingsFor (control->id, isShiftHeld()))
         applyToTarget (*control, *b, e);
 }
 
@@ -363,21 +481,19 @@ void HostEngine::applyToTarget (const ControlDef& c, const Binding& b, const Raw
     const auto* info = findTarget (t);
     const bool pressed = e.address.type == MsgType::Note ? e.noteOn : e.value >= 64;
 
-    // Pads: pass note on/off to the deck's instrument. Pad n (in binding order) plays note 36 + n.
-    if (isDeck && rest == "pads")
+    // Pads keep their velocity for instruments.
+    if (isDeck && rest.startsWith ("pad."))
     {
-        int padIndex = 0;
-        for (auto* pb : profile.bindingsForTarget (t))
-        {
-            if (pb == &b) break;
-            ++padIndex;
-        }
-        const int note = jlimit (0, 127, 36 + padIndex);
-        auto& col = decks[(size_t) d]->midiIn;
-        if (pressed)
-            col.addMessageToQueue (MidiMessage::noteOn (1, note, (uint8) jmax (1, e.address.type == MsgType::Note ? e.value : 100)).withTimeStamp (Time::getMillisecondCounterHiRes() * 0.001));
-        else
-            col.addMessageToQueue (MidiMessage::noteOff (1, note).withTimeStamp (Time::getMillisecondCounterHiRes() * 0.001));
+        padPress (d, rest.fromFirstOccurrenceOf (".", false, false).getIntValue() - 1, pressed,
+                  e.address.type == MsgType::Note ? e.value : 100, isShiftHeld());
+        MessageManager::callAsync ([this] { refreshLeds (false); });
+        return;
+    }
+
+    if (info != nullptr && info->momentary)
+    {
+        momentary (t, pressed);
+        MessageManager::callAsync ([this] { refreshLeds (false); });
         return;
     }
 
@@ -385,25 +501,19 @@ void HostEngine::applyToTarget (const ControlDef& c, const Binding& b, const Raw
     {
         if (! pressed) return;
         if (auto* flag = findBool (t))
-        {
             flag->store (! flag->load());
-            MessageManager::callAsync ([this] { refreshLeds (false); });
-        }
+        else if (info->toggle)
+            MessageManager::callAsync ([this, t] { setToggle (t, ! getToggle (t)); });
         else
-        {
-            MessageManager::callAsync ([this, t, toggle = info->toggle]
-            {
-                if (toggle) setToggle (t, ! getToggle (t)); else trigger (t);
-                refreshLeds (false);
-            });
-        }
+            trigger (t);
+        MessageManager::callAsync ([this] { refreshLeds (false); });
         return;
     }
 
     // Continuous targets.
-    float abs01 = -1.0f, delta = 0.0f;
+    float abs01 = -1.0f, rel = 0.0f;
     if (c.kind == ControlKind::Relative)
-        delta = (float) decodeRelative (e.value, c.relative) * b.sensitivity / 128.0f * (b.invert ? -1.0f : 1.0f);
+        rel = (float) decodeRelative (e.value, c.relative) * b.sensitivity * (b.invert ? -1.0f : 1.0f);
     else if (e.address.type == MsgType::PitchBend)
         abs01 = (float) e.value / 16383.0f;
     else if (e.address.type == MsgType::Note)
@@ -412,15 +522,46 @@ void HostEngine::applyToTarget (const ControlDef& c, const Binding& b, const Raw
         abs01 = (float) e.value / 127.0f;
     if (abs01 >= 0.0f && b.invert) abs01 = 1.0f - abs01;
 
-    if (auto* f = findFloat (t))
+    if (t == "library.scroll")
     {
-        f->store (abs01 >= 0.0f ? abs01 : jlimit (0.0f, 1.0f, f->load() + delta));
+        const int size = librarySize.load();
+        if (size > 0)
+            librarySelection = jlimit (0, size - 1, librarySelection.load() + (int) std::round (rel != 0 ? rel : (abs01 >= 0.5f ? 1 : -1)));
         return;
     }
 
-    if (isDeck && (rest == "jog" || rest.startsWith ("macro.")))
+    if (auto* f = findFloat (t))
     {
-        const int m = rest == "jog" ? -1 : rest.fromFirstOccurrenceOf (".", false, false).getIntValue() - 1;
+        if (abs01 >= 0.0f)
+        {
+            // Soft takeover: a fader only grabs the value once it reaches or crosses it,
+            // so moving it after a sync, a preset or an on-screen change doesn't jump.
+            const float cur = f->load();
+            auto it = lastHardware.find (c.id + t);
+            const float last = it != lastHardware.end() ? it->second : -1.0f;
+            lastHardware[c.id + t] = abs01;
+            const bool crossed = last >= 0.0f && ((last <= cur && abs01 >= cur) || (last >= cur && abs01 <= cur));
+            if (softTakeover && c.address.type != MsgType::Note && std::abs (abs01 - cur) > 0.04f && ! crossed)
+                return;
+            f->store (abs01);
+        }
+        else
+            f->store (jlimit (0.0f, 1.0f, f->load() + rel / 128.0f));
+        if (isDeck && rest == "tempo")
+            decks[(size_t) d]->player.push ({ TrackPlayer::Cmd::SyncOff });
+        return;
+    }
+
+    if (isDeck && rest == "jog" && decks[(size_t) d]->player.loaded)
+    {
+        decks[(size_t) d]->player.push ({ TrackPlayer::Cmd::Jog, (double) rel });
+        return;
+    }
+
+    if (isDeck && (rest == "jog" || rest == "macroJog" || rest.startsWith ("macro.")))
+    {
+        const int m = rest.startsWith ("macro.") ? rest.fromFirstOccurrenceOf (".", false, false).getIntValue() - 1 : -1;
+        const float delta = rel / 128.0f;
         MessageManager::callAsync ([this, d, m, abs01, delta]
         {
             auto& deck = *decks[(size_t) d];
@@ -441,6 +582,84 @@ void HostEngine::timerCallback()
         refreshMidiOutput();
     }
     refreshLeds (false);
+    for (int d = 0; d < numDecks; ++d)
+        if (decks[(size_t) d]->player.changeCount.load() != savedChange[(size_t) d])
+            rememberTrack (d);
+    if (trackCacheDirty && tick % 50 == 0)
+        saveTrackCache();
+}
+
+//==============================================================================
+static File trackCacheFile()
+{
+    return File::getSpecialLocation (File::userApplicationDataDirectory)
+        .getChildFile (DECKRIG_BRAND_NAME).getChildFile (DECKRIG_PRODUCT_NAME).getChildFile ("Tracks.json");
+}
+
+void HostEngine::loadTrackCache()
+{
+    trackCache = JSON::parse (trackCacheFile());
+    if (! trackCache.isObject()) trackCache = var (new DynamicObject());
+}
+
+void HostEngine::saveTrackCache()
+{
+    if (! trackCacheDirty) return;
+    auto f = trackCacheFile();
+    f.getParentDirectory().createDirectory();
+    f.replaceWithText (JSON::toString (trackCache, true));
+    trackCacheDirty = false;
+}
+
+void HostEngine::rememberTrack (int d)
+{
+    auto& pl = decks[(size_t) d]->player;
+    savedChange[(size_t) d] = pl.changeCount.load();
+    auto t = pl.getTrack();
+    if (t == nullptr) return;
+    auto* o = new DynamicObject();
+    o->setProperty ("cue", pl.cuePoint.load());
+    o->setProperty ("bpm", pl.bpm.load());
+    Array<var> hc;
+    for (auto& h : pl.hotcues) hc.add (h.load());
+    o->setProperty ("hotcues", hc);
+    if (auto* obj = trackCache.getDynamicObject())
+        obj->setProperty (t->file.getFullPathName(), var (o));
+    trackCacheDirty = true;
+}
+
+void HostEngine::loadTrack (int d, const File& file)
+{
+    if (! isPositiveAndBelow (d, numDecks)) return;
+    rememberTrack (d);
+    const int gen = ++loadGeneration[(size_t) d];
+    loading[(size_t) d] = true;
+    loader.addJob ([this, d, file, gen]
+    {
+        String err;
+        auto t = deckrig::loadTrack (formats, file, err);
+        MessageManager::callAsync ([this, d, t, err, gen, file]
+        {
+            if (gen != loadGeneration[(size_t) d]) return;  // a newer load replaced this one
+            loading[(size_t) d] = false;
+            if (t != nullptr)
+            {
+                auto saved = trackCache.getProperty (file.getFullPathName(), {});
+                std::array<double, numHotcues> hc;
+                hc.fill (-1.0);
+                if (auto* arr = saved.getProperty ("hotcues", {}).getArray())
+                    for (int i = 0; i < jmin (numHotcues, arr->size()); ++i)
+                        hc[(size_t) i] = (double) (*arr)[i];
+                const double cue = saved.isObject() ? (double) saved.getProperty ("cue", -1.0) : -1.0;
+                if (saved.isObject() && (double) saved.getProperty ("bpm", 0.0) > 0)
+                    t->beats.bpm = (double) saved.getProperty ("bpm", 0.0);
+                decks[(size_t) d]->player.setTrack (t, cue, &hc);
+                savedChange[(size_t) d] = decks[(size_t) d]->player.changeCount.load();
+            }
+            if (onTrackLoaded) onTrackLoaded (d, err);
+            sendChangeMessage();
+        });
+    });
 }
 
 void HostEngine::enableNewMidiInputs()
@@ -489,11 +708,11 @@ void HostEngine::refreshLeds (bool force)
         {
             if (! c.led) continue;
             bool on = false, any = false;
-            for (auto* b : profile.bindingsFor (c.id))
-                if (auto* info = findTarget (b->target); info != nullptr && info->toggle)
+            for (auto* b : profile.activeBindingsFor (c.id, false))
+                if (auto* info = findTarget (b->target); info != nullptr && info->led)
                 {
                     any = true;
-                    on = on || getToggle (b->target);
+                    on = on || getLed (b->target);
                 }
             if (! any) continue;
             auto it = ledSent.find (c.id);
@@ -538,6 +757,11 @@ std::unique_ptr<XmlElement> HostEngine::createSessionXml() const
         e->setAttribute ("pfl", p.pfl.load());
         e->setAttribute ("chainBypass", p.chainBypass.load());
         e->setAttribute ("inputPair", p.inputPair.load());
+        e->setAttribute ("tempo", p.tempo.load());
+        e->setAttribute ("tempoRange", p.tempoRange.load());
+        e->setAttribute ("padMode", p.padMode.load());
+        if (auto t = d->player.getTrack())
+            e->setAttribute ("track", t->file.getFullPathName());
         e->addChildElement (d->chain.toXml().release());
         for (int m = 0; m < numMacros; ++m)
         {
@@ -577,6 +801,11 @@ void HostEngine::restoreSessionXml (const XmlElement& xml)
         p.pfl = e->getBoolAttribute ("pfl");
         p.chainBypass = e->getBoolAttribute ("chainBypass");
         p.inputPair = e->getIntAttribute ("inputPair", -1);
+        p.tempo = (float) e->getDoubleAttribute ("tempo", 0.5);
+        p.tempoRange = e->getIntAttribute ("tempoRange", 0);
+        p.padMode = e->getIntAttribute ("padMode", 0);
+        if (File track (e->getStringAttribute ("track")); e->hasAttribute ("track") && track.existsAsFile())
+            loadTrack (i, track);
         if (auto* c = e->getChildByName ("CHAIN"))
             d.chain.fromXml (*c);
         for (auto* me : e->getChildWithTagNameIterator ("MACRO"))

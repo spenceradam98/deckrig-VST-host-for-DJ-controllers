@@ -267,14 +267,19 @@ void ChainList::closeEditor (AudioProcessor* p)
 
 void ChainList::resized()
 {
-    auto r = getLocalBounds().reduced (6);
-    const int rowH = jlimit (18, 26, (r.getHeight() - 4 * 7) / (maxSlots + 1));
-    for (auto* b : slotButtons)
+    auto r = getLocalBounds().reduced (5);
+    // One column when there's room, else two (slots fill down then across).
+    const int items = slotButtons.size() + 1;
+    const int rowH = 20, gap = 3;
+    const int rowsFit = jmax (1, (r.getHeight() + gap) / (rowH + gap));
+    const int cols = items > rowsFit ? 2 : 1;
+    const int colW = (r.getWidth() - (cols - 1) * 4) / cols;
+    for (int i = 0; i < items; ++i)
     {
-        b->setBounds (r.removeFromTop (rowH));
-        r.removeFromTop (4);
+        const int c = jmin (cols - 1, i / rowsFit), row = i - c * rowsFit;
+        Rectangle<int> b (r.getX() + c * (colW + 4), r.getY() + row * (rowH + gap), colW, rowH);
+        if (i < slotButtons.size()) slotButtons[i]->setBounds (b); else addButton.setBounds (b);
     }
-    addButton.setBounds (r.removeFromTop (rowH));
 }
 
 void ChainList::paint (Graphics& g)
@@ -286,8 +291,8 @@ void ChainList::paint (Graphics& g)
     {
         g.setColour (t.dimText);
         g.setFont (t.font (12.0f));
-        g.drawFittedText ("No plugins on this deck yet.\nAdd an instrument to play it from the pads,\nor effects to process the deck's input.",
-                          getLocalBounds().reduced (10).withTrimmedTop (40), Justification::centredTop, 4);
+        g.drawFittedText ("No plugins yet. Add effects to process this deck,\nor an instrument to play from the pads in INSTR mode.",
+                          getLocalBounds().reduced (10).withTrimmedTop (28), Justification::centredTop, 4);
     }
 }
 } // namespace deckrig
