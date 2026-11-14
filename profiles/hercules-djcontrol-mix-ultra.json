@@ -1,0 +1,738 @@
+{
+  "format": "deckrig-mapping",
+  "version": 1,
+  "name": "Hercules DJControl Mix Ultra (draft)",
+  "deviceMatch": "Mix Ultra",
+  "notes": "DRAFT. Control layout follows the DJControl Mix Ultra; the MIDI numbers follow the convention of other Hercules DJControl models and are NOT yet checked on real hardware. Run Controller > Learn controller... once with the controller plugged in to capture the real numbers; the bindings below are kept.",
+  "controls": [
+    {
+      "id": "xfader",
+      "label": "Crossfader",
+      "type": "cc",
+      "channel": 1,
+      "number": 0,
+      "kind": "absolute",
+      "learned": false
+    },
+    {
+      "id": "master",
+      "label": "Master level",
+      "type": "cc",
+      "channel": 1,
+      "number": 3,
+      "kind": "absolute",
+      "learned": false
+    },
+    {
+      "id": "browse",
+      "label": "Browser encoder",
+      "type": "cc",
+      "channel": 1,
+      "number": 1,
+      "kind": "relative",
+      "learned": false,
+      "relative": "twos"
+    },
+    {
+      "id": "browsePush",
+      "label": "Browser push",
+      "type": "note",
+      "channel": 1,
+      "number": 0,
+      "kind": "button",
+      "learned": false
+    },
+    {
+      "id": "deckA.volume",
+      "label": "Deck A volume fader",
+      "type": "cc",
+      "channel": 2,
+      "number": 0,
+      "kind": "absolute",
+      "learned": false
+    },
+    {
+      "id": "deckA.eqHigh",
+      "label": "Deck A EQ high",
+      "type": "cc",
+      "channel": 2,
+      "number": 2,
+      "kind": "absolute",
+      "learned": false
+    },
+    {
+      "id": "deckA.eqMid",
+      "label": "Deck A EQ mid",
+      "type": "cc",
+      "channel": 2,
+      "number": 3,
+      "kind": "absolute",
+      "learned": false
+    },
+    {
+      "id": "deckA.eqLow",
+      "label": "Deck A EQ low",
+      "type": "cc",
+      "channel": 2,
+      "number": 4,
+      "kind": "absolute",
+      "learned": false
+    },
+    {
+      "id": "deckA.filter",
+      "label": "Deck A filter",
+      "type": "cc",
+      "channel": 2,
+      "number": 1,
+      "kind": "absolute",
+      "learned": false
+    },
+    {
+      "id": "deckA.pitch",
+      "label": "Deck A pitch fader",
+      "type": "cc",
+      "channel": 2,
+      "number": 8,
+      "kind": "absolute",
+      "learned": false
+    },
+    {
+      "id": "deckA.jog",
+      "label": "Deck A jog wheel",
+      "type": "cc",
+      "channel": 2,
+      "number": 10,
+      "kind": "relative",
+      "learned": false,
+      "relative": "twos"
+    },
+    {
+      "id": "deckA.jogTouch",
+      "label": "Deck A jog touch",
+      "type": "note",
+      "channel": 2,
+      "number": 8,
+      "kind": "button",
+      "learned": false
+    },
+    {
+      "id": "deckA.play",
+      "label": "Deck A Play",
+      "type": "note",
+      "channel": 2,
+      "number": 7,
+      "kind": "button",
+      "learned": false,
+      "led": true
+    },
+    {
+      "id": "deckA.cue",
+      "label": "Deck A Cue",
+      "type": "note",
+      "channel": 2,
+      "number": 6,
+      "kind": "button",
+      "learned": false,
+      "led": true
+    },
+    {
+      "id": "deckA.sync",
+      "label": "Deck A Sync",
+      "type": "note",
+      "channel": 2,
+      "number": 5,
+      "kind": "button",
+      "learned": false,
+      "led": true
+    },
+    {
+      "id": "deckA.pfl",
+      "label": "Deck A PFL",
+      "type": "note",
+      "channel": 2,
+      "number": 12,
+      "kind": "button",
+      "learned": false,
+      "led": true
+    },
+    {
+      "id": "deckA.load",
+      "label": "Deck A Load",
+      "type": "note",
+      "channel": 2,
+      "number": 13,
+      "kind": "button",
+      "learned": false
+    },
+    {
+      "id": "deckA.shift",
+      "label": "Deck A Shift",
+      "type": "note",
+      "channel": 2,
+      "number": 4,
+      "kind": "button",
+      "learned": false
+    },
+    {
+      "id": "deckA.modeHotcue",
+      "label": "Deck A Hotcue mode",
+      "type": "note",
+      "channel": 2,
+      "number": 15,
+      "kind": "button",
+      "learned": false,
+      "led": true
+    },
+    {
+      "id": "deckA.modeLoop",
+      "label": "Deck A Loop mode",
+      "type": "note",
+      "channel": 2,
+      "number": 16,
+      "kind": "button",
+      "learned": false,
+      "led": true
+    },
+    {
+      "id": "deckA.modeFx",
+      "label": "Deck A Fx mode",
+      "type": "note",
+      "channel": 2,
+      "number": 17,
+      "kind": "button",
+      "learned": false,
+      "led": true
+    },
+    {
+      "id": "deckA.modeNeural",
+      "label": "Deck A Neural mode",
+      "type": "note",
+      "channel": 2,
+      "number": 18,
+      "kind": "button",
+      "learned": false,
+      "led": true
+    },
+    {
+      "id": "deckA.pad1",
+      "label": "Deck A pad 1",
+      "type": "note",
+      "channel": 6,
+      "number": 0,
+      "kind": "pad",
+      "learned": false
+    },
+    {
+      "id": "deckA.pad2",
+      "label": "Deck A pad 2",
+      "type": "note",
+      "channel": 6,
+      "number": 1,
+      "kind": "pad",
+      "learned": false
+    },
+    {
+      "id": "deckA.pad3",
+      "label": "Deck A pad 3",
+      "type": "note",
+      "channel": 6,
+      "number": 2,
+      "kind": "pad",
+      "learned": false
+    },
+    {
+      "id": "deckA.pad4",
+      "label": "Deck A pad 4",
+      "type": "note",
+      "channel": 6,
+      "number": 3,
+      "kind": "pad",
+      "learned": false
+    },
+    {
+      "id": "deckA.pad5",
+      "label": "Deck A pad 5",
+      "type": "note",
+      "channel": 6,
+      "number": 4,
+      "kind": "pad",
+      "learned": false
+    },
+    {
+      "id": "deckA.pad6",
+      "label": "Deck A pad 6",
+      "type": "note",
+      "channel": 6,
+      "number": 5,
+      "kind": "pad",
+      "learned": false
+    },
+    {
+      "id": "deckA.pad7",
+      "label": "Deck A pad 7",
+      "type": "note",
+      "channel": 6,
+      "number": 6,
+      "kind": "pad",
+      "learned": false
+    },
+    {
+      "id": "deckA.pad8",
+      "label": "Deck A pad 8",
+      "type": "note",
+      "channel": 6,
+      "number": 7,
+      "kind": "pad",
+      "learned": false
+    },
+    {
+      "id": "deckB.volume",
+      "label": "Deck B volume fader",
+      "type": "cc",
+      "channel": 3,
+      "number": 0,
+      "kind": "absolute",
+      "learned": false
+    },
+    {
+      "id": "deckB.eqHigh",
+      "label": "Deck B EQ high",
+      "type": "cc",
+      "channel": 3,
+      "number": 2,
+      "kind": "absolute",
+      "learned": false
+    },
+    {
+      "id": "deckB.eqMid",
+      "label": "Deck B EQ mid",
+      "type": "cc",
+      "channel": 3,
+      "number": 3,
+      "kind": "absolute",
+      "learned": false
+    },
+    {
+      "id": "deckB.eqLow",
+      "label": "Deck B EQ low",
+      "type": "cc",
+      "channel": 3,
+      "number": 4,
+      "kind": "absolute",
+      "learned": false
+    },
+    {
+      "id": "deckB.filter",
+      "label": "Deck B filter",
+      "type": "cc",
+      "channel": 3,
+      "number": 1,
+      "kind": "absolute",
+      "learned": false
+    },
+    {
+      "id": "deckB.pitch",
+      "label": "Deck B pitch fader",
+      "type": "cc",
+      "channel": 3,
+      "number": 8,
+      "kind": "absolute",
+      "learned": false
+    },
+    {
+      "id": "deckB.jog",
+      "label": "Deck B jog wheel",
+      "type": "cc",
+      "channel": 3,
+      "number": 10,
+      "kind": "relative",
+      "learned": false,
+      "relative": "twos"
+    },
+    {
+      "id": "deckB.jogTouch",
+      "label": "Deck B jog touch",
+      "type": "note",
+      "channel": 3,
+      "number": 8,
+      "kind": "button",
+      "learned": false
+    },
+    {
+      "id": "deckB.play",
+      "label": "Deck B Play",
+      "type": "note",
+      "channel": 3,
+      "number": 7,
+      "kind": "button",
+      "learned": false,
+      "led": true
+    },
+    {
+      "id": "deckB.cue",
+      "label": "Deck B Cue",
+      "type": "note",
+      "channel": 3,
+      "number": 6,
+      "kind": "button",
+      "learned": false,
+      "led": true
+    },
+    {
+      "id": "deckB.sync",
+      "label": "Deck B Sync",
+      "type": "note",
+      "channel": 3,
+      "number": 5,
+      "kind": "button",
+      "learned": false,
+      "led": true
+    },
+    {
+      "id": "deckB.pfl",
+      "label": "Deck B PFL",
+      "type": "note",
+      "channel": 3,
+      "number": 12,
+      "kind": "button",
+      "learned": false,
+      "led": true
+    },
+    {
+      "id": "deckB.load",
+      "label": "Deck B Load",
+      "type": "note",
+      "channel": 3,
+      "number": 13,
+      "kind": "button",
+      "learned": false
+    },
+    {
+      "id": "deckB.shift",
+      "label": "Deck B Shift",
+      "type": "note",
+      "channel": 3,
+      "number": 4,
+      "kind": "button",
+      "learned": false
+    },
+    {
+      "id": "deckB.modeHotcue",
+      "label": "Deck B Hotcue mode",
+      "type": "note",
+      "channel": 3,
+      "number": 15,
+      "kind": "button",
+      "learned": false,
+      "led": true
+    },
+    {
+      "id": "deckB.modeLoop",
+      "label": "Deck B Loop mode",
+      "type": "note",
+      "channel": 3,
+      "number": 16,
+      "kind": "button",
+      "learned": false,
+      "led": true
+    },
+    {
+      "id": "deckB.modeFx",
+      "label": "Deck B Fx mode",
+      "type": "note",
+      "channel": 3,
+      "number": 17,
+      "kind": "button",
+      "learned": false,
+      "led": true
+    },
+    {
+      "id": "deckB.modeNeural",
+      "label": "Deck B Neural mode",
+      "type": "note",
+      "channel": 3,
+      "number": 18,
+      "kind": "button",
+      "learned": false,
+      "led": true
+    },
+    {
+      "id": "deckB.pad1",
+      "label": "Deck B pad 1",
+      "type": "note",
+      "channel": 7,
+      "number": 0,
+      "kind": "pad",
+      "learned": false
+    },
+    {
+      "id": "deckB.pad2",
+      "label": "Deck B pad 2",
+      "type": "note",
+      "channel": 7,
+      "number": 1,
+      "kind": "pad",
+      "learned": false
+    },
+    {
+      "id": "deckB.pad3",
+      "label": "Deck B pad 3",
+      "type": "note",
+      "channel": 7,
+      "number": 2,
+      "kind": "pad",
+      "learned": false
+    },
+    {
+      "id": "deckB.pad4",
+      "label": "Deck B pad 4",
+      "type": "note",
+      "channel": 7,
+      "number": 3,
+      "kind": "pad",
+      "learned": false
+    },
+    {
+      "id": "deckB.pad5",
+      "label": "Deck B pad 5",
+      "type": "note",
+      "channel": 7,
+      "number": 4,
+      "kind": "pad",
+      "learned": false
+    },
+    {
+      "id": "deckB.pad6",
+      "label": "Deck B pad 6",
+      "type": "note",
+      "channel": 7,
+      "number": 5,
+      "kind": "pad",
+      "learned": false
+    },
+    {
+      "id": "deckB.pad7",
+      "label": "Deck B pad 7",
+      "type": "note",
+      "channel": 7,
+      "number": 6,
+      "kind": "pad",
+      "learned": false
+    },
+    {
+      "id": "deckB.pad8",
+      "label": "Deck B pad 8",
+      "type": "note",
+      "channel": 7,
+      "number": 7,
+      "kind": "pad",
+      "learned": false
+    }
+  ],
+  "bindings": [
+    {
+      "control": "xfader",
+      "target": "mixer.crossfader"
+    },
+    {
+      "control": "master",
+      "target": "mixer.master"
+    },
+    {
+      "control": "deckA.volume",
+      "target": "deck.A.volume"
+    },
+    {
+      "control": "deckA.eqHigh",
+      "target": "deck.A.eqHigh"
+    },
+    {
+      "control": "deckA.eqMid",
+      "target": "deck.A.eqMid"
+    },
+    {
+      "control": "deckA.eqLow",
+      "target": "deck.A.eqLow"
+    },
+    {
+      "control": "deckA.filter",
+      "target": "deck.A.filter"
+    },
+    {
+      "control": "deckA.pitch",
+      "target": "deck.A.macro.1",
+      "invert": true
+    },
+    {
+      "control": "deckA.jog",
+      "target": "deck.A.jog",
+      "sensitivity": 1.0
+    },
+    {
+      "control": "deckA.play",
+      "target": "deck.A.slot.1.bypass"
+    },
+    {
+      "control": "deckA.cue",
+      "target": "deck.A.slot.2.bypass"
+    },
+    {
+      "control": "deckA.sync",
+      "target": "deck.A.slot.3.bypass"
+    },
+    {
+      "control": "deckA.pfl",
+      "target": "deck.A.pfl"
+    },
+    {
+      "control": "deckA.load",
+      "target": "deck.A.macroNext"
+    },
+    {
+      "control": "deckA.modeHotcue",
+      "target": "deck.A.slot.4.bypass"
+    },
+    {
+      "control": "deckA.modeLoop",
+      "target": "deck.A.slot.5.bypass"
+    },
+    {
+      "control": "deckA.modeFx",
+      "target": "deck.A.chainBypass"
+    },
+    {
+      "control": "deckA.modeNeural",
+      "target": "deck.A.slot.6.bypass"
+    },
+    {
+      "control": "deckA.pad1",
+      "target": "deck.A.pads"
+    },
+    {
+      "control": "deckA.pad2",
+      "target": "deck.A.pads"
+    },
+    {
+      "control": "deckA.pad3",
+      "target": "deck.A.pads"
+    },
+    {
+      "control": "deckA.pad4",
+      "target": "deck.A.pads"
+    },
+    {
+      "control": "deckA.pad5",
+      "target": "deck.A.pads"
+    },
+    {
+      "control": "deckA.pad6",
+      "target": "deck.A.pads"
+    },
+    {
+      "control": "deckA.pad7",
+      "target": "deck.A.pads"
+    },
+    {
+      "control": "deckA.pad8",
+      "target": "deck.A.pads"
+    },
+    {
+      "control": "deckB.volume",
+      "target": "deck.B.volume"
+    },
+    {
+      "control": "deckB.eqHigh",
+      "target": "deck.B.eqHigh"
+    },
+    {
+      "control": "deckB.eqMid",
+      "target": "deck.B.eqMid"
+    },
+    {
+      "control": "deckB.eqLow",
+      "target": "deck.B.eqLow"
+    },
+    {
+      "control": "deckB.filter",
+      "target": "deck.B.filter"
+    },
+    {
+      "control": "deckB.pitch",
+      "target": "deck.B.macro.1",
+      "invert": true
+    },
+    {
+      "control": "deckB.jog",
+      "target": "deck.B.jog",
+      "sensitivity": 1.0
+    },
+    {
+      "control": "deckB.play",
+      "target": "deck.B.slot.1.bypass"
+    },
+    {
+      "control": "deckB.cue",
+      "target": "deck.B.slot.2.bypass"
+    },
+    {
+      "control": "deckB.sync",
+      "target": "deck.B.slot.3.bypass"
+    },
+    {
+      "control": "deckB.pfl",
+      "target": "deck.B.pfl"
+    },
+    {
+      "control": "deckB.load",
+      "target": "deck.B.macroNext"
+    },
+    {
+      "control": "deckB.modeHotcue",
+      "target": "deck.B.slot.4.bypass"
+    },
+    {
+      "control": "deckB.modeLoop",
+      "target": "deck.B.slot.5.bypass"
+    },
+    {
+      "control": "deckB.modeFx",
+      "target": "deck.B.chainBypass"
+    },
+    {
+      "control": "deckB.modeNeural",
+      "target": "deck.B.slot.6.bypass"
+    },
+    {
+      "control": "deckB.pad1",
+      "target": "deck.B.pads"
+    },
+    {
+      "control": "deckB.pad2",
+      "target": "deck.B.pads"
+    },
+    {
+      "control": "deckB.pad3",
+      "target": "deck.B.pads"
+    },
+    {
+      "control": "deckB.pad4",
+      "target": "deck.B.pads"
+    },
+    {
+      "control": "deckB.pad5",
+      "target": "deck.B.pads"
+    },
+    {
+      "control": "deckB.pad6",
+      "target": "deck.B.pads"
+    },
+    {
+      "control": "deckB.pad7",
+      "target": "deck.B.pads"
+    },
+    {
+      "control": "deckB.pad8",
+      "target": "deck.B.pads"
+    }
+  ]
+}
